@@ -1,6 +1,6 @@
-# UOE Marketplace
+# UoE Marketplace
 
-A campus student marketplace built for University of Edinburgh students to buy and sell household items at the end of their academic journey.
+A campus student marketplace built for University of Eldoret students to buy and sell household items at the end of their academic journey.
 
 ## Overview
 
@@ -19,7 +19,7 @@ A campus student marketplace built for University of Edinburgh students to buy a
 
 ## 🎓 Target Audience
 
-- University of Edinburgh students preparing to leave campus
+- University of Eldoret students preparing to leave campus
 - Students looking for affordable household items
 - International students joining the university
 
@@ -96,4 +96,3 @@ public/            # Static assets
 
 ## 📄 License
 
-[Add your license here]
