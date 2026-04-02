@@ -1,0 +1,23 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper to check if user is signed in
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Item Images: Anyone can view, only authenticated users can upload to their folders
+    match /listings/{listingId}/{imageName} {
+      allow read: if true;
+      allow write: if isSignedIn();
+      // allow delete: if isSignedIn() && request.auth.uid == get(/databases/$(database)/documents/listings/$(listingId)).data.sellerUid;
+    }
+
+    // Profile Pictures
+    match /users/{userId}/profile.jpg {
+      allow read: if true;
+      allow write: if isSignedIn() && request.auth.uid == userId;
+    }
+  }
+}
