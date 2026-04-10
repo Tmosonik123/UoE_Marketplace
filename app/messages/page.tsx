@@ -97,7 +97,7 @@ function MessagesContent() {
                userNamesCache[chat.otherUid] = name;
                   
                // Trigger re-render with new name for ALL chats involving this user
-               setChats(currentChats => currentChats.map(c => 
+               setChats((currentChats: any[]) => currentChats.map(c => 
                   c.otherUid === chat.otherUid ? { ...c, otherName: name } : c
                ));
             } catch (e) {
@@ -108,7 +108,7 @@ function MessagesContent() {
       });
       
       const parsedUrlChatId = new URLSearchParams(window.location.search).get("chatId");
-      setSelectedChat(currentSelected => {
+      setSelectedChat((currentSelected: any) => {
          // Only force the URL chat to open if we haven't selected anything yet!
          if (parsedUrlChatId && !currentSelected) {
             const chatToSelect = filtered.find(c => c?.id === parsedUrlChatId);
