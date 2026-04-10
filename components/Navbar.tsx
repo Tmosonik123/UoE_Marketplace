@@ -2,16 +2,14 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Search, ShoppingBag, User, Menu, X, PlusCircle, MessageSquare, ShieldCheck, Sun, Moon } from "lucide-react";
+import { Search, ShoppingBag, User, Menu, X, PlusCircle, MessageSquare, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { useTheme } from "@/context/ThemeContext";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const { user, userData, isAdmin, loading } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Handle scroll effect for glassmorphism
@@ -76,12 +74,6 @@ export default function Navbar() {
 
         {/* Desktop Nav Items */}
         <div className="hidden lg:flex items-center gap-6">
-          <button 
-             onClick={toggleTheme}
-             className="p-2.5 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-500 hover:text-primary transition-all shadow-inner"
-          >
-             {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5 font-bold" />}
-          </button>
           <Link href="/browse" className="text-sm font-medium hover:text-primary flex items-center gap-2">
             <ShoppingBag className="w-4 h-4" /> Browse
           </Link>
@@ -109,10 +101,10 @@ export default function Navbar() {
               </Link>
               <Link href="/profile" className="flex items-center gap-2 p-1 rounded-full border border-slate-200 hover:border-primary transition-colors">
                 <div className="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center overflow-hidden">
-                  {user.photoURL ? (
-                    <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" />
+                  {userData?.photoURL ? (
+                    <img src={userData.photoURL} alt="Profile" className="w-full h-full object-cover" />
                   ) : (
-                    <User className="w-5 h-5 text-secondary" />
+                    <User className="w-5 h-5 text-slate-400" />
                   )}
                 </div>
               </Link>

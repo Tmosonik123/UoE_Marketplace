@@ -40,10 +40,10 @@ export default function RootLayout({
                     <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white font-bold text-lg">
                       U
                     </div>
-                    <span className="font-bold text-xl">UoE Marketplace</span>
+                    <span className="font-bold mb-2 text-white">UoE Marketplace</span>
                   </div>
                   <p className="text-slate-400 max-w-sm">
-                    Empowering University of Eldoret students to share resources safely and efficiently. Founded by students, for students.
+                    By Comrades, for Comrades.
                   </p>
                 </div>
                 <div>
@@ -52,7 +52,7 @@ export default function RootLayout({
                     <li><a href="/browse" className="hover:text-white">Browse All</a></li>
                     <li><a href="/categories/textbooks" className="hover:text-white">Textbooks</a></li>
                     <li><a href="/categories/electronics" className="hover:text-white">Electronics</a></li>
-                    <li><a href="/categories/hostels" className="hover:text-white">Hostels & Housing</a></li>
+                    <li><a href="/categories/utensils" className="hover:text-white">Utensils</a></li>
                   </ul>
                 </div>
                 <div>
@@ -66,7 +66,7 @@ export default function RootLayout({
                 </div>
               </div>
               <div className="container mt-12 pt-8 border-t border-slate-800 text-center text-slate-500 text-xs">
-                &copy; {new Date().getFullYear()} UoE Marketplace. Built with premium standards by Senior Developers.
+                &copy; {new Date().getFullYear()} UoE Marketplace.
               </div>
             </footer>
           </AuthProvider>

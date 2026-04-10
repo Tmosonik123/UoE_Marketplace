@@ -36,10 +36,15 @@ export default function AdminPage() {
   const [reports, setReports] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [allListings, setAllListings] = useState<any[]>([]);
-  const [counts, setCounts] = useState({ users: 0, items: 0, chats: 0, reports: 0 });
+  const [counts, setCounts] = useState({ users: 0, items: 0, activeItems: 0, chats: 0, reports: 0 });
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [userPage, setUserPage] = useState(0); // For pagination if needed
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isBanModalOpen, setIsBanModalOpen] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [banDuration, setBanDuration] = useState("7"); // Default 7 days
+  const [userPage, setUserPage] = useState(0); 
+  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     // 1. Guard: Only run listeners if authenticated AND admin
@@ -54,12 +59,14 @@ export default function AdminPage() {
       try {
         const uSnapshot = await getCountFromServer(collection(db, "users"));
         const iSnapshot = await getCountFromServer(collection(db, "listings"));
+        const activeSnapshot = await getCountFromServer(query(collection(db, "listings"), where("status", "==", "approved")));
         const cSnapshot = await getCountFromServer(collection(db, "chats"));
         const rSnapshot = await getCountFromServer(query(collection(db, "reports"), where("status", "==", "pending")));
         
         setCounts({
           users: uSnapshot.data().count,
           items: iSnapshot.data().count,
+          activeItems: activeSnapshot.data().count,
           chats: cSnapshot.data().count,
           reports: rSnapshot.data().count
         });
@@ -157,6 +164,106 @@ export default function AdminPage() {
     }
   };
 
+  const handleApproveUser = async (user: any) => {
+    setActionLoading(user.id);
+    try {
+      await updateDoc(doc(db, "users", user.id), { isVerified: !user.isVerified });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleBanUser = async () => {
+    if (!selectedUserId) return;
+    setActionLoading(selectedUserId);
+    try {
+      const until = new Date();
+      if (banDuration === "permanent") {
+        until.setFullYear(until.getFullYear() + 100);
+      } else {
+        until.setDate(until.getDate() + parseInt(banDuration));
+      }
+      
+      await updateDoc(doc(db, "users", selectedUserId), { 
+        bannedUntil: until.toISOString(),
+        isVerified: false
+      });
+      setIsBanModalOpen(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleUnbanUser = async (userId: string) => {
+    setActionLoading(userId);
+    try {
+      await updateDoc(doc(db, "users", userId), { bannedUntil: null });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleArchiveUser = async (userId: string) => {
+    if (!confirm("Archive this user account? They will lose access to the platform.")) return;
+    setActionLoading(userId);
+    try {
+      await updateDoc(doc(db, "users", userId), { isArchived: true });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRestoreUser = async (userId: string) => {
+    setActionLoading(userId);
+    try {
+      await updateDoc(doc(db, "users", userId), { isArchived: false });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handlePermanentDeleteUser = async (userId: string) => {
+    if (!confirm("PERMANENTLY delete this user profile? This action is irreversible.")) return;
+    setActionLoading(userId);
+    try {
+      await deleteDoc(doc(db, "users", userId));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+  const filteredUsers = allUsers.filter(u => {
+    const matchesSearch = u.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          u.email?.toLowerCase().includes(searchQuery.toLowerCase());
+    const isArchived = u.isArchived === true;
+    return matchesSearch && (showArchived ? isArchived : !isArchived);
+  });
+
+  const filteredInventory = allListings.filter(l => 
+    l.title?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    l.sellerName?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredPending = pendingListings.filter(l => 
+    l.title?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredReports = reports.filter(r => 
+    r.itemTitle?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    r.reason?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   // Guard Rendering
   if (authLoading) {
     return (
@@ -182,8 +289,8 @@ export default function AdminPage() {
 
   const stats = [
     { label: "Total Users", value: counts.users.toLocaleString(), icon: Users, color: "bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600", change: "+12%", tab: "users" as AdminTab },
-    { label: "Total Listings", value: counts.items.toLocaleString(), icon: Package, color: "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600", change: "+8%", tab: "inventory" as AdminTab },
-    { label: "Total Chats", value: counts.chats.toLocaleString(), icon: MessageSquare, color: "bg-amber-50 dark:bg-amber-900/20 text-amber-600", change: "+24%", tab: "pending" as AdminTab },
+    { label: "All Listings", value: counts.items.toLocaleString(), icon: Package, color: "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600", change: "+8%", tab: "inventory" as AdminTab },
+    { label: "Active Listings", value: counts.activeItems.toLocaleString(), icon: CheckCircle, color: "bg-green-50 dark:bg-green-900/20 text-green-600", change: counts.activeItems > 0 ? "Live" : "No Activity", tab: "inventory" as AdminTab },
     { label: "Pending Reports", value: counts.reports.toLocaleString(), icon: AlertCircle, color: "bg-rose-50 dark:bg-rose-900/20 text-rose-600", change: counts.reports > 0 ? "Action Required" : "All Clear", tab: "reports" as AdminTab },
   ];
 
@@ -194,7 +301,7 @@ export default function AdminPage() {
           <div className="flex items-center gap-2 text-primary font-black uppercase tracking-[0.2em] text-[10px] mb-2 mb-1.5 ml-1">
             <ShieldCheck className="w-4 h-4" /> Admin Terminal
           </div>
-          <h1 className="text-4xl font-black tracking-tight">System <span className="text-primary italic">Moderation</span></h1>
+          <h1 className="text-4xl font-black tracking-tight">System <span className="text-primary">Moderation</span></h1>
           <p className="text-slate-500 dark:text-slate-400 font-medium">Protecting the UoE campus marketplace community.</p>
         </div>
       </div>
@@ -239,6 +346,18 @@ export default function AdminPage() {
                   <AlertCircle className="w-4 h-4" /> Reported Content
                   {reports.length > 0 && <span className="ml-auto bg-white/20 px-1.5 py-0.5 rounded text-[8px]">{reports.length}</span>}
                </button>
+               <button 
+                  onClick={() => setActiveTab("users")}
+                  className={`flex items-center gap-3 px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border ${activeTab === 'users' ? "bg-indigo-500 text-white border-indigo-500 shadow-xl shadow-indigo-100 dark:shadow-none" : "text-slate-400 border-transparent hover:bg-slate-50 dark:hover:bg-slate-800"}`}
+               >
+                  <Users className="w-4 h-4" /> User Directory
+               </button>
+               <button 
+                  onClick={() => setActiveTab("inventory")}
+                  className={`flex items-center gap-3 px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border ${activeTab === 'inventory' ? "bg-emerald-500 text-white border-emerald-500 shadow-xl shadow-emerald-100 dark:shadow-none" : "text-slate-400 border-transparent hover:bg-slate-50 dark:hover:bg-slate-800"}`}
+               >
+                  <Package className="w-4 h-4" /> Inventory
+               </button>
             </div>
          </aside>
 
@@ -256,12 +375,26 @@ export default function AdminPage() {
             {activeTab === 'users' && "User Directory"}
             {activeTab === 'inventory' && "Master Listing Inventory"}
           </h3>
-                  <div className="flex items-center gap-3">
-                     <div className="relative">
-                        <input type="text" placeholder="Search..." className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-xl py-2 px-10 text-xs font-bold outline-none transition-all" />
-                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
-                     </div>
-                  </div>
+                   <div className="flex items-center gap-3">
+                      {activeTab === 'users' && (
+                         <button 
+                            onClick={() => setShowArchived(!showArchived)}
+                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${showArchived ? 'bg-primary text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-primary'}`}
+                         >
+                            {showArchived ? "View Active Users" : "View Archived"}
+                         </button>
+                      )}
+                      <div className="relative">
+                         <input 
+                          type="text" 
+                          placeholder={`Search ${activeTab}...`} 
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-xl py-2 px-10 text-xs font-bold outline-none transition-all focus:ring-2 focus:ring-primary" 
+                        />
+                         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+                      </div>
+                   </div>
                </div>
 
                <div className="overflow-x-auto">
@@ -271,17 +404,17 @@ export default function AdminPage() {
                           <th className="p-6 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-800">
                              {activeTab === 'pending' ? "Item Details" : activeTab === 'users' ? "User Profile" : "Details"}
                           </th>
-                          <th className="p-6 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-800">
-                             {activeTab === 'pending' || activeTab === 'inventory' ? "Seller" : activeTab === 'users' ? "Email Contact" : "Reported By"}
-                          </th>
+                           <th className="p-6 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-800">
+                              {activeTab === 'pending' || activeTab === 'inventory' ? "Seller" : activeTab === 'users' ? "Contact / Activity" : "Reported By"}
+                           </th>
                           <th className="p-6 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-800">
                              {activeTab === 'users' ? "Role" : "Category / Reason"}
                           </th>
                           <th className="p-6 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-800 text-right">Actions</th>
                        </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
-                       {activeTab === 'pending' && pendingListings.map(listing => (
+                     <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
+                       {activeTab === 'pending' && filteredPending.map(listing => (
                           <tr key={listing.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
                              <td className="p-6">
                                 <div className="font-bold text-sm">{listing.title} <span className="text-primary font-black ml-1 text-xs">KES {listing.price?.toLocaleString()}</span></div>
@@ -298,42 +431,109 @@ export default function AdminPage() {
                           </tr>
                        ))}
 
-                       {activeTab === 'reports' && reports.map(report => (
+                        {activeTab === 'reports' && filteredReports.map(report => (
                           <tr key={report.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
                              <td className="p-6">
-                                <div className="font-bold text-sm">Item: {report.itemTitle}</div>
-                                <div className="text-[10px] font-black text-rose-500 uppercase mt-1">URGENT REPORT</div>
+                                <Link href={`/items/${report.itemId}`} className="group">
+                                   <div className="font-bold text-sm group-hover:text-primary transition-colors">Item: {report.itemTitle}</div>
+                                   <div className="text-[10px] font-black text-rose-500 uppercase mt-1 flex items-center gap-1">
+                                      <AlertCircle className="w-3 h-3" /> Reported Content
+                                   </div>
+                                </Link>
                              </td>
                              <td className="p-6 text-sm font-medium">Citizen ID: {report.reporterUid?.slice(0, 6)}...</td>
                              <td className="p-6 text-xs text-slate-500 italic max-w-xs truncate">"{report.reason}"</td>
                              <td className="p-6">
-                                <div className="flex items-center justify-end gap-2">
-                                   <button onClick={() => handleDismissReport(report.id)} className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-400 rounded-lg hover:bg-slate-200 transition-all font-bold text-[10px] px-3">Dismiss</button>
-                                   <button onClick={() => handleDeleteReportedItem(report.id, report.itemId)} className="p-2 bg-rose-50 dark:bg-rose-900/20 text-rose-500 rounded-lg hover:bg-rose-500 hover:text-white transition-all font-bold text-[10px] px-3">Delete Item</button>
-                                </div>
+                                 <div className="flex items-center justify-end gap-2">
+                                    <Link href={`/items/${report.itemId}`} className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-400 rounded-lg hover:text-primary transition-all font-bold text-[10px] px-3">View Item</Link>
+                                    <button onClick={() => handleDismissReport(report.id)} className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-400 rounded-lg hover:bg-slate-200 transition-all font-bold text-[10px] px-3">Dismiss</button>
+                                    <button onClick={() => handleDeleteReportedItem(report.id, report.itemId)} className="p-2 bg-rose-50 dark:bg-rose-900/20 text-rose-500 rounded-lg hover:bg-rose-500 hover:text-white transition-all font-bold text-[10px] px-3">Delete Item</button>
+                                 </div>
                              </td>
                           </tr>
                        ))}
 
-                       {activeTab === 'users' && allUsers.map(u => (
+                        {activeTab === 'users' && filteredUsers.map(u => (
                           <tr key={u.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                             <td className="p-6">
-                                <div className="font-bold text-sm">{u.name}</div>
-                                <div className="text-[10px] font-black text-slate-400 uppercase mt-1">UID: {u.id?.slice(0, 8)}...</div>
-                             </td>
-                             <td className="p-6 text-sm font-medium text-slate-600">{u.email}</td>
+                              <td className="p-6">
+                                 <div className="font-bold text-sm">{u.name}</div>
+                                 <div className="text-[10px] font-black text-slate-400 uppercase mt-1">UID: {u.id?.slice(0, 8)}...</div>
+                              </td>
+                              <td className="p-6 text-sm font-medium">
+                                 <div className="text-slate-600">{u.email}</div>
+                                 <div className="text-[10px] text-slate-400 font-bold mt-1">
+                                    Seen: {u.lastSeen ? new Date(u.lastSeen).toLocaleDateString() : 'Unknown'}
+                                 </div>
+                              </td>
                              <td className="p-6">
                                 <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${u.role === 'admin' ? 'bg-amber-50 text-amber-600 ring-1 ring-amber-200' : 'bg-slate-100 text-slate-500'}`}>
                                    {u.role || 'Student'}
                                 </span>
                              </td>
-                             <td className="p-6 text-right">
-                                <button className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-400 rounded-lg hover:text-primary transition-all"><MoreVertical className="w-4 h-4" /></button>
-                             </td>
+                              <td className="p-6 text-right">
+                                 <div className="flex items-center justify-end gap-2">
+                                    {showArchived ? (
+                                      <>
+                                        <button 
+                                           onClick={() => handleRestoreUser(u.id)}
+                                           className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-500 hover:text-white transition-all font-bold text-[10px] px-3"
+                                        >
+                                           Restore
+                                        </button>
+                                        <button 
+                                           onClick={() => handlePermanentDeleteUser(u.id)}
+                                           disabled={u.id === user.uid}
+                                           className={`p-2 rounded-lg transition-all ml-2 ${u.id === user.uid ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white'}`}
+                                           title={u.id === user.uid ? "Cannot delete yourself" : "Permanent Delete"}
+                                        >
+                                           <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <button 
+                                           onClick={() => handleApproveUser(u)}
+                                           disabled={u.id === user.uid}
+                                           className={`p-2 rounded-lg transition-all ${u.id === user.uid ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : u.isVerified ? 'bg-green-500 text-white' : 'bg-slate-100 text-slate-400 hover:bg-green-50'}`}
+                                           title={u.id === user.uid ? "Cannot verify yourself" : u.isVerified ? "Revoke Approval" : "Approve Student"}
+                                        >
+                                           <ShieldCheck className="w-4 h-4" />
+                                        </button>
+                                        {u.bannedUntil && new Date(u.bannedUntil) > new Date() ? (
+                                           <button 
+                                              onClick={() => handleUnbanUser(u.id)}
+                                              disabled={u.id === user.uid}
+                                              className={`p-2 rounded-lg transition-all ${u.id === user.uid ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-slate-900 text-white hover:bg-slate-700'}`}
+                                              title={u.id === user.uid ? "Cannot unban yourself" : "Unban User"}
+                                           >
+                                              <Lock className="w-4 h-4" />
+                                           </button>
+                                        ) : (
+                                           <button 
+                                              onClick={() => { setSelectedUserId(u.id); setIsBanModalOpen(true); }}
+                                              disabled={u.id === user.uid}
+                                              className={`p-2 rounded-lg transition-all ${u.id === user.uid ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white'}`}
+                                              title={u.id === user.uid ? "Cannot ban yourself" : "Ban User"}
+                                           >
+                                              <UserX className="w-4 h-4" />
+                                           </button>
+                                        )}
+                                        <button 
+                                           onClick={() => handleArchiveUser(u.id)}
+                                           disabled={u.id === user.uid}
+                                           className={`p-2 rounded-lg transition-all ${u.id === user.uid ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-slate-50 text-slate-400 hover:bg-amber-500 hover:text-white'}`}
+                                           title={u.id === user.uid ? "Cannot archive yourself" : "Archive User"}
+                                        >
+                                           <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </>
+                                    )}
+                                 </div>
+                              </td>
                           </tr>
                        ))}
 
-                       {activeTab === 'inventory' && allListings.map(listing => (
+                        {activeTab === 'inventory' && filteredInventory.map(listing => (
                           <tr key={listing.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
                              <td className="p-6">
                                 <div className="font-bold text-sm mb-0.5">{listing.title}</div>
@@ -366,7 +566,51 @@ export default function AdminPage() {
                </div>
             </div>
          </main>
-      </div>
+       </div>
+
+       {/* Ban Modal */}
+       {isBanModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+             <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2rem] p-8 shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-2 bg-rose-500"></div>
+                <h2 className="text-2xl font-black mb-1">Ban <span className="text-rose-500">User</span></h2>
+                <p className="text-slate-500 text-sm mb-8 font-medium">Select horizontal suspension duration.</p>
+
+                <div className="space-y-4">
+                   <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Duration</label>
+                      <select 
+                        value={banDuration}
+                        onChange={(e) => setBanDuration(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl py-3 px-4 text-sm font-bold outline-none ring-2 ring-transparent focus:ring-rose-500 transition-all appearance-none"
+                      >
+                         <option value="1">24 Hours</option>
+                         <option value="3">3 Days</option>
+                         <option value="7">1 Week</option>
+                         <option value="30">1 Month</option>
+                         <option value="365">1 Year</option>
+                         <option value="permanent">Permanent</option>
+                      </select>
+                   </div>
+
+                   <div className="flex items-center gap-3 pt-4">
+                      <button 
+                        onClick={() => setIsBanModalOpen(false)}
+                        className="flex-1 py-4 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        onClick={handleBanUser}
+                        className="flex-1 bg-slate-900 text-white py-4 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-rose-600 transition-all shadow-xl shadow-slate-200 dark:shadow-none"
+                      >
+                        Apply Ban
+                      </button>
+                   </div>
+                </div>
+             </div>
+          </div>
+       )}
     </div>
   );
 }

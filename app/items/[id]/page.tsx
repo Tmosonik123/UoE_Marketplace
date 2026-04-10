@@ -17,7 +17,8 @@ import {
   AlertTriangle, 
   Loader2,
   Star,
-  X
+  X,
+  XCircle
 } from "lucide-react";
 import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
@@ -51,8 +52,30 @@ export default function ItemDetailPage() {
           if (itemData.sellerUid) {
             const sellerRef = doc(db, "users", itemData.sellerUid);
             const sellerSnap = await getDoc(sellerRef);
+            
+            // Fetch Seller ratings
+            const ratingsRef = collection(db, "ratings");
+            const qRatings = query(ratingsRef, where("targetUid", "==", itemData.sellerUid));
+            const ratingsSnap = await getDocs(qRatings);
+            
+            // Fetch Seller active ads real-time
+            const listingsRef = collection(db, "listings");
+            const qActive = query(listingsRef, where("sellerUid", "==", itemData.sellerUid), where("status", "==", "approved"));
+            const activeSnap = await getDocs(qActive);
+
+            let avgRating = 0;
+            if (!ratingsSnap.empty) {
+              const total = ratingsSnap.docs.reduce((acc, d) => acc + (d.data().rating || 0), 0);
+              avgRating = total / ratingsSnap.size;
+            }
+
             if (sellerSnap.exists()) {
-              setSeller(sellerSnap.data());
+              setSeller({
+                ...sellerSnap.data(),
+                calculatedRating: avgRating,
+                reviewCount: ratingsSnap.size,
+                activeAdsCount: activeSnap.size
+              });
             }
           }
         }
@@ -242,9 +265,15 @@ export default function ItemDetailPage() {
           </div>
 
           <div className="flex flex-col gap-4 pt-6 border-t border-slate-100 dark:border-slate-800">
-             <button onClick={handleStartChat} disabled={actionLoading} className="btn-primary w-full py-4 text-base justify-center shadow-xl shadow-indigo-100 dark:shadow-none font-black uppercase tracking-widest text-xs disabled:opacity-70">
-                {actionLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><MessageCircle className="w-5 h-5 mr-2" /> Start Real-time Chat</>}
-             </button>
+             {item.status === 'sold' ? (
+               <div className="w-full py-4 text-center bg-slate-100 text-slate-500 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 cursor-not-allowed">
+                  <XCircle className="w-5 h-5" /> This item has been sold
+               </div>
+             ) : (
+               <button onClick={handleStartChat} disabled={actionLoading} className="btn-primary w-full py-4 text-base justify-center shadow-xl shadow-indigo-100 dark:shadow-none font-black uppercase tracking-widest text-xs disabled:opacity-70">
+                  {actionLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><MessageCircle className="w-5 h-5 mr-2" /> Start Real-time Chat</>}
+               </button>
+             )}
              <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/20 text-amber-700 dark:text-amber-500 p-4 rounded-2xl flex items-start gap-4">
                 <ShieldCheck className="w-6 h-6 flex-shrink-0 mt-0.5" />
                 <div className="text-xs leading-relaxed">
@@ -265,7 +294,8 @@ export default function ItemDetailPage() {
                       {seller?.name || item.sellerName || "Anonymous Seller"}
                    </Link>
                    <div className="flex items-center gap-1.5 text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-0.5">
-                      <Star className="w-2.5 h-2.5 text-amber-500 fill-amber-500" /> 5.0 Rating &bull; Verified Student
+                      <Star className={`w-2.5 h-2.5 ${seller?.calculatedRating > 0 ? 'text-amber-500 fill-amber-500' : 'text-slate-300'}`} /> 
+                      {seller?.calculatedRating > 0 ? `${seller.calculatedRating.toFixed(1)} Rating` : 'No reviews'} &bull; {seller?.isVerified ? 'Verified Student' : 'Student'}
                    </div>
                 </div>
                 <Link href={`/profile/${item.sellerUid}`} className="ml-auto p-2 bg-slate-50 dark:bg-slate-800 rounded-xl hover:text-primary transition-all">
@@ -274,11 +304,19 @@ export default function ItemDetailPage() {
              </div>
              <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl text-center">
-                   <span className="block text-xl font-black dark:text-slate-100">{seller?.listingsCount || 1}</span>
+                   <span className="block text-xl font-black dark:text-slate-100">{seller?.activeAdsCount || 0}</span>
                    <span className="block text-[10px] font-black uppercase text-slate-400 tracking-widest">Active Ads</span>
                 </div>
                 <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl text-center">
-                   <span className="block text-xl font-black dark:text-slate-100">2024</span>
+                   <span className="block text-xl font-black dark:text-slate-100">
+                     {seller?.createdAt ? (
+                       typeof seller.createdAt === 'string' 
+                         ? new Date(seller.createdAt).getFullYear() 
+                         : (seller.createdAt as any).toDate?.() 
+                           ? (seller.createdAt as any).toDate().getFullYear() 
+                           : '2024'
+                     ) : '2024'}
+                   </span>
                    <span className="block text-[10px] font-black uppercase text-slate-400 tracking-widest">Member Since</span>
                 </div>
              </div>

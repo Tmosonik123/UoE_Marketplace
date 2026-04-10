@@ -7,14 +7,14 @@ import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { auth, db, storage } from "@/lib/firebase";
 
-const CATEGORIES = ["Textbooks", "Electronics", "Furniture", "Clothing", "Services", "Hostels", "Other"];
+const CATEGORIES = ["Textbooks", "Electronics", "Furniture", "Clothing", "Utensils", "Stationery", "Bedding", "Services", "Other"];
 const CONDITIONS = ["New", "Like New", "Excellent", "Good", "Used"];
 
 export default function CreateListingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
-  
+
   // Form State
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
@@ -22,7 +22,7 @@ export default function CreateListingPage() {
   const [condition, setCondition] = useState("");
   const [location, setLocation] = useState("");
   const [description, setDescription] = useState("");
-  
+
   // Media State
   const [images, setImages] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
@@ -98,8 +98,8 @@ export default function CreateListingPage() {
           <Package className="w-6 h-6" />
         </div>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">List an <span className="text-primary italic">Item</span></h1>
-          <p className="text-slate-500 font-medium">Ready to sell? Describe your item and reach fellow students.</p>
+          <h1 className="text-3xl font-bold tracking-tight">List an <span className="text-primary">Item</span></h1>
+          <p className="text-slate-500 font-medium">Ready to sell? List your item and reach a potential buyer.</p>
         </div>
       </div>
 
@@ -117,11 +117,11 @@ export default function CreateListingPage() {
             <h3 className="text-lg font-bold flex items-center gap-2 mb-2">
               <ClipboardList className="w-5 h-5 text-primary" /> Basic Information
             </h3>
-            
+
             <div className="flex flex-col gap-2">
               <label className="text-xs font-black uppercase text-slate-400 tracking-widest ml-1">Item Title</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. MacBook Air M1, Calculus Textbook..."
@@ -133,8 +133,8 @@ export default function CreateListingPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-black uppercase text-slate-400 tracking-widest ml-1">Price (KES)</label>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
                   placeholder="0.00"
@@ -144,7 +144,7 @@ export default function CreateListingPage() {
               </div>
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-black uppercase text-slate-400 tracking-widest ml-1">Category</label>
-                <select 
+                <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-5 focus:ring-2 focus:ring-primary outline-none transition-all font-medium appearance-none"
@@ -158,7 +158,7 @@ export default function CreateListingPage() {
 
             <div className="flex flex-col gap-2">
               <label className="text-xs font-black uppercase text-slate-400 tracking-widest ml-1">Description</label>
-              <textarea 
+              <textarea
                 rows={5}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -173,15 +173,15 @@ export default function CreateListingPage() {
             <h3 className="text-lg font-bold flex items-center gap-2 mb-2">
               <MapPin className="w-5 h-5 text-primary" /> Location & Condition
             </h3>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-black uppercase text-slate-400 tracking-widest ml-1">Item Condition</label>
-                <select 
-                   value={condition}
-                   onChange={(e) => setCondition(e.target.value)}
-                   className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-5 focus:ring-2 focus:ring-primary outline-none transition-all font-medium"
-                   required
+                <select
+                  value={condition}
+                  onChange={(e) => setCondition(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-5 focus:ring-2 focus:ring-primary outline-none transition-all font-medium"
+                  required
                 >
                   <option value="">Select Condition</option>
                   {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
@@ -189,8 +189,8 @@ export default function CreateListingPage() {
               </div>
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-black uppercase text-slate-400 tracking-widest ml-1">Pickup Location</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                   placeholder="e.g. Main Campus Library, Hostel D..."
@@ -208,23 +208,23 @@ export default function CreateListingPage() {
             <h3 className="text-lg font-bold flex items-center gap-2 mb-6">
               <Camera className="w-5 h-5 text-primary" /> Photos
             </h3>
-            
+
             <div className="space-y-4">
-              <input 
-                type="file" 
-                multiple 
-                accept="image/*" 
+              <input
+                type="file"
+                multiple
+                accept="image/*"
                 ref={fileInputRef}
                 onChange={handleImageChange}
                 className="hidden"
               />
-              
+
               {previews.length > 0 && (
                 <div className="grid grid-cols-2 gap-3">
                   {previews.map((preview, idx) => (
                     <div key={idx} className="relative aspect-square rounded-xl overflow-hidden group border border-slate-200">
                       <img src={preview} alt="Preview" className="w-full h-full object-cover" />
-                      <button 
+                      <button
                         type="button"
                         onClick={() => removeImage(idx)}
                         className="absolute top-1.5 right-1.5 bg-black/50 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
@@ -234,19 +234,19 @@ export default function CreateListingPage() {
                     </div>
                   ))}
                   {previews.length < 5 && (
-                     <button 
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="aspect-square bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center text-slate-400 hover:border-primary hover:text-primary transition-all"
-                     >
-                       <PlusCircle className="w-6 h-6" />
-                     </button>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="aspect-square bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center text-slate-400 hover:border-primary hover:text-primary transition-all"
+                    >
+                      <PlusCircle className="w-6 h-6" />
+                    </button>
                   )}
                 </div>
               )}
 
               {previews.length === 0 && (
-                <div 
+                <div
                   onClick={() => fileInputRef.current?.click()}
                   className="aspect-square bg-slate-100 border-2 border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center gap-4 group hover:border-primary transition-all cursor-pointer"
                 >
@@ -262,16 +262,16 @@ export default function CreateListingPage() {
             </div>
           </div>
 
-          <div className="bg-primary text-white card p-8 space-y-6 shadow-xl shadow-indigo-100 border-none relative overflow-hidden group">
+          <div className="bg-primary  card p-8 space-y-6 shadow-xl shadow-indigo-100 border-none relative overflow-hidden group">
             <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all"></div>
             <h4 className="text-lg font-black uppercase tracking-widest opacity-80">Ready to post?</h4>
-            <ul className="space-y-3 text-sm font-medium text-white/90">
+            <ul className="space-y-3 text-sm font-medium/90">
               <li className="flex items-center gap-2"><Tag className="w-4 h-4" /> Reach thousands of students</li>
               <li className="flex items-center gap-2"><ArrowRight className="w-4 h-4" /> Secured real-time chat</li>
               <li className="flex items-center gap-2"><Save className="w-4 h-4" /> Save drafts anytime</li>
             </ul>
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={loading}
               className="w-full bg-white text-primary py-4 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all mt-4 flex items-center justify-center gap-2"
             >

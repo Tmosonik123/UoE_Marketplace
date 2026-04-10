@@ -5,9 +5,14 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Search, Send, User, MapPin, MoreHorizontal, MessageSquare, ArrowLeft, Loader2, Package, Star, Trash2, X } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, getDoc, increment } from "firebase/firestore";
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, getDoc, increment, writeBatch, arrayRemove } from "firebase/firestore";
+import { useAuth } from "@/context/AuthContext";
+
+// Cache user names to prevent massive N+1 query overhead in realtime listeners
+const userNamesCache: Record<string, string> = {};
 
 function MessagesContent() {
+  const { user } = useAuth();
   const searchParams = useSearchParams();
   const urlChatId = searchParams.get("chatId");
   const [chats, setChats] = useState<any[]>([]);
@@ -22,34 +27,30 @@ function MessagesContent() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
+  // Track which chats we've cleared unread for this session to avoid cascading writes
+  const clearedChatsRef = useRef<Set<string>>(new Set());
 
   // 1. Fetch user's active chats in real-time
   useEffect(() => {
-    if (!auth.currentUser) return;
+    if (!user) return;
     
     const q = query(
       collection(db, "chats"),
-      where("participants", "array-contains", auth.currentUser.uid)
+      where("participants", "array-contains", user.uid)
     );
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const chatList = await Promise.all(snapshot.docs.map(async (chatDoc) => {
+      const chatList = snapshot.docs.map((chatDoc) => {
         const data = chatDoc.data() as any;
         
         // Skip if current user has hidden this chat
-        if (data.hiddenBy?.includes(auth.currentUser?.uid)) return null;
+        if (data.hiddenBy?.includes(user?.uid)) return null;
 
         const participants = data.participants || [];
-        const otherUid = participants.find((id: string) => id !== auth.currentUser?.uid);
+        const otherUid = participants.find((id: string) => id !== user?.uid);
         
-        // Fetch other user's name
-        let otherName = "UoE Student";
-        if (otherUid) {
-          const userDoc = await getDoc(doc(db, "users", otherUid));
-          if (userDoc.exists()) {
-            otherName = userDoc.data().name;
-          }
-        }
+        // Use cache if available, otherwise placeholder. Fetch happens async.
+        let otherName = otherUid && userNamesCache[otherUid] ? userNamesCache[otherUid] : "UoE Student";
 
         let formattedTime = "Just now";
         try {
@@ -66,13 +67,14 @@ function MessagesContent() {
         return {
           id: chatDoc.id,
           ...data,
+          otherUid, // Store this for async fetch later
           otherName,
           timestamp: formattedTime
         };
-      }));
+      });
 
-      // Filter out nulls and sort in-memory
-      const filtered = chatList.filter(c => c !== null).sort((a: any, b: any) => {
+      // Filter out nulls and sort
+      let filtered = chatList.filter(c => c !== null).sort((a: any, b: any) => {
         const dateA = a.updatedAt?.seconds || 0;
         const dateB = b.updatedAt?.seconds || 0;
         return dateB - dateA;
@@ -81,19 +83,50 @@ function MessagesContent() {
       setChats(filtered as any[]);
       setLoading(false);
 
-      // Auto-select chat from URL
-      const urlChatId = new URLSearchParams(window.location.search).get("chatId");
-      if (urlChatId) {
-        const chat = filtered.find(c => c?.id === urlChatId);
-        if (chat) setSelectedChat(chat);
-      }
+      // Async fetch missing names to update state WITHOUT blocking initial render
+      filtered.forEach(async (chat) => {
+         if (chat.otherUid && !userNamesCache[chat.otherUid]) {
+            // Instantly mark as fetching so duplicate chats with this user don't fire parallel requests
+            userNamesCache[chat.otherUid] = "Loading...";
+            
+            try {
+               const userDoc = await getDoc(doc(db, "users", chat.otherUid));
+               const name = userDoc.exists() ? userDoc.data().name : "Unknown User";
+               userNamesCache[chat.otherUid] = name;
+                  
+               // Trigger re-render with new name for ALL chats involving this user
+               setChats(currentChats => currentChats.map(c => 
+                  c.otherUid === chat.otherUid ? { ...c, otherName: name } : c
+               ));
+            } catch (e) {
+               console.error("Failed to fetch user name:", e);
+               userNamesCache[chat.otherUid] = "Unknown User"; // Prevent infinite retry loops
+            }
+         }
+      });
+      
+      const parsedUrlChatId = new URLSearchParams(window.location.search).get("chatId");
+      setSelectedChat(currentSelected => {
+         // Only force the URL chat to open if we haven't selected anything yet!
+         if (parsedUrlChatId && !currentSelected) {
+            const chatToSelect = filtered.find(c => c?.id === parsedUrlChatId);
+            return chatToSelect || null;
+         }
+         // Otherwise, preserve the current chat selection silently when updates arrive!
+         if (currentSelected) {
+            const updatedCurrentChat = filtered.find(c => c?.id === currentSelected.id);
+            return updatedCurrentChat || currentSelected;
+         }
+         return null;
+      });
+      
     }, (err) => {
       console.error("[onSnapshot Inbox Chats] error:", err);
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [urlChatId]);
+  }, [urlChatId, user]);
 
   // 2. Fetch messages for selected chat
   useEffect(() => {
@@ -107,7 +140,7 @@ function MessagesContent() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const msgList = snapshot.docs.map(msgDoc => {
         const data = msgDoc.data();
-        let formattedTime = "Sending...";
+        let formattedTime = "Just now";
         
         try {
           if (data.createdAt && typeof data.createdAt.toDate === "function") {
@@ -126,6 +159,7 @@ function MessagesContent() {
           timestamp: formattedTime
         };
       });
+      // Replace all messages (including any optimistic ones) with the authoritative server list
       setMessages(msgList);
       setTimeout(scrollToBottom, 50);
     }, (err) => {
@@ -135,24 +169,33 @@ function MessagesContent() {
     return () => unsubscribe();
   }, [selectedChat?.id]);
 
-  // 3. Clear unread count for current user when chat is active
+  // 3. Clear unread count ONCE when a chat is first opened (not on every message update)
+  // Using a ref to track cleared chats prevents the cascading write loop:
+  // new message → unreadCount++ → effect fires → clears → listener fires again → repeat
   useEffect(() => {
-    if (!selectedChat?.id || !auth.currentUser) return;
-    const currentUid = auth.currentUser.uid;
+    if (!selectedChat?.id || !user) return;
+    const currentUid = user.uid;
+    const chatId = selectedChat.id;
     
-    const clearUnread = async () => {
-      try {
-        const chatRef = doc(db, "chats", selectedChat.id);
-        await updateDoc(chatRef, {
-          [`unreadCount.${currentUid}`]: 0
-        });
-      } catch (err) {
-        console.warn("[clearUnread] error:", err);
-      }
-    };
+    // Only clear once per chat per session
+    if (clearedChatsRef.current.has(chatId)) return;
     
-    clearUnread();
-  }, [selectedChat?.id, messages.length]);
+    const unreadCount = selectedChat.unreadCount?.[currentUid] || 0;
+    if (unreadCount <= 0) return;
+
+    // Mark as cleared immediately to prevent duplicate calls
+    clearedChatsRef.current.add(chatId);
+    
+    const chatRef = doc(db, "chats", chatId);
+    updateDoc(chatRef, {
+      [`unreadCount.${currentUid}`]: 0
+    }).catch(err => {
+      console.warn("[clearUnread] error:", err);
+      // Remove from cleared set on failure so it can retry next time
+      clearedChatsRef.current.delete(chatId);
+    });
+  }, [selectedChat?.id, user]);
+  // Note: intentionally NOT depending on selectedChat.unreadCount to avoid re-triggering
 
   // 3. Fetch item status for rating prompt
   useEffect(() => {
@@ -172,51 +215,66 @@ function MessagesContent() {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !selectedChat || !auth.currentUser) return;
+    if (!newMessage.trim() || !selectedChat || !user) return;
+    
+    // Check if item is sold and user is restricted
+    if (selectedItem?.status === 'sold') {
+      const isBuyer = selectedItem.buyerUid === user.uid;
+      if (!isBuyer || selectedItem.isRated) {
+        alert("Messaging is closed for this sold item.");
+        return;
+      }
+    }
     
     const text = newMessage.trim();
-    setNewMessage(""); // Clear early for better UX
-    setSending(true);
-    
-    try {
-      const chatRef = doc(db, "chats", selectedChat.id);
-      const messagesRef = collection(db, "chats", selectedChat.id, "messages");
-      
-      const currentUserUid = auth.currentUser!.uid;
-      
-      // 1. Add Message
-      await addDoc(messagesRef, {
-        text,
-        senderUid: currentUserUid,
-        createdAt: serverTimestamp()
-      });
+    const currentUserUid = user.uid;
+    const otherUid = selectedChat.participants?.find((id: string) => id !== currentUserUid);
+    const participants = selectedChat.participants || [currentUserUid, otherUid].filter(Boolean);
 
-      const otherUid = selectedChat.participants?.find((id: string) => id !== currentUserUid);
-      
-      // 2. Update Chat Metadata & Increment Unread for Other Participant
-      await updateDoc(chatRef, {
-        lastMessage: {
-          text,
-          senderUid: currentUserUid,
-          createdAt: serverTimestamp()
-        },
+    // OPTIMISTIC UPDATE: Show message instantly for sender
+    const optimisticId = `optimistic-${Date.now()}`;
+    setMessages(prev => [...prev, {
+      id: optimisticId,
+      text,
+      senderUid: currentUserUid,
+      participants,
+      timestamp: new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(new Date()),
+    }]);
+    setNewMessage("");
+    scrollToBottom();
+
+    const chatRef = doc(db, "chats", selectedChat.id);
+    const messagesRef = collection(db, "chats", selectedChat.id, "messages");
+
+    // CAUSAL ORDER: Write message first, then update chat metadata in .then()
+    // This ensures the recipient's inbox never pings before the message document exists.
+    // Without this, two parallel writes could leave recipient clicking an empty thread.
+    addDoc(messagesRef, {
+      text,
+      senderUid: currentUserUid,
+      participants, // stored for fast Firestore rule checks
+      createdAt: serverTimestamp()
+    })
+    .then(() => {
+      // Only update inbox metadata AFTER message is committed to the server
+      return updateDoc(chatRef, {
+        lastMessage: { text, senderUid: currentUserUid, createdAt: serverTimestamp() },
         updatedAt: serverTimestamp(),
-        hiddenBy: [], // Re-enable for everyone when new message arrives
+        [`hiddenBy`]: arrayRemove(currentUserUid),
         ...(otherUid ? { [`unreadCount.${otherUid}`]: increment(1) } : {})
       });
-      
-      setNewMessage("");
-      scrollToBottom();
-    } catch (err) {
-      console.error("Send error:", err);
-      alert("Failed to send message.");
-    } finally {
-      setSending(false);
-    }
+    })
+    .catch(err => {
+      console.error("Send failed:", err);
+      // Remove optimistic message so user knows to retry
+      setMessages(prev => prev.filter(m => m.id !== optimisticId));
+    });
+
+    scrollToBottom();
   };
 
   const handleDeleteChat = async () => {
-    if (!selectedChat || !auth.currentUser) return;
+    if (!selectedChat || !user) return;
     
     if (confirm("Hide this conversation? It will reappear if you receive a new message.")) {
       const chatRef = doc(db, "chats", selectedChat.id);
@@ -224,7 +282,7 @@ function MessagesContent() {
       try {
         const currentHidden = selectedChat.hiddenBy || [];
         await updateDoc(chatRef, {
-          hiddenBy: [...currentHidden, auth.currentUser.uid]
+          hiddenBy: [...currentHidden, user.uid]
         });
         setSelectedChat(null);
       } catch (err) {
@@ -322,7 +380,7 @@ function MessagesContent() {
             </div>
 
             {/* Rating Prompt for Buyer if Item is Sold */}
-            {selectedItem?.status === 'sold' && selectedChat?.participants?.[0] === auth.currentUser?.uid && !selectedItem?.isRated && (
+            {selectedItem?.status === 'sold' && selectedItem?.buyerUid === auth.currentUser?.uid && !selectedItem?.isRated && (
                <div className="mx-6 mt-4 p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/20 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 animate-fade-in">
                   <div className="flex items-center gap-3">
                      <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center">
@@ -351,14 +409,14 @@ function MessagesContent() {
               </div>
               
               {messages.map((msg) => (
-                <div key={msg.id} className={`flex ${msg.senderUid === auth.currentUser?.uid ? "justify-end" : "justify-start"} animate-fade-in`}>
+                <div key={msg.id} className={`flex ${msg.senderUid === user?.uid ? "justify-end" : "justify-start"} animate-fade-in`}>
                   <div className={`max-w-[75%] px-5 py-3.5 rounded-2xl shadow-sm leading-relaxed text-sm ${
-                    msg.senderUid === auth.currentUser?.uid 
+                    msg.senderUid === user?.uid 
                       ? "bg-primary text-white rounded-br-none" 
                       : "bg-slate-100 text-slate-700 rounded-bl-none"
                   }`}>
                     {msg.text}
-                    <div className={`text-[10px] mt-1.5 font-bold ${msg.senderUid === auth.currentUser?.uid ? "text-indigo-100 text-right" : "text-slate-400"}`}>
+                    <div className={`text-[10px] mt-1.5 font-bold ${msg.senderUid === user?.uid ? "text-indigo-100 text-right" : "text-slate-400"}`}>
                       {msg.timestamp}
                     </div>
                   </div>
@@ -369,22 +427,32 @@ function MessagesContent() {
 
             {/* Input Area */}
             <div className="p-6 border-t border-slate-100 bg-slate-50/50">
-               <form onSubmit={handleSendMessage} className="flex items-center gap-4 bg-white p-2 pl-6 rounded-2xl shadow-sm border border-slate-100 focus-within:ring-2 focus-within:ring-primary focus-within:border-transparent transition-all">
-                  <input 
-                    type="text" 
-                    placeholder="Type your message here..." 
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    className="flex-1 bg-transparent border-none outline-none text-sm font-medium"
-                  />
-                  <button 
-                    type="submit" 
-                    disabled={sending || !newMessage.trim()}
-                    className="w-10 h-10 bg-primary text-white rounded-xl flex items-center justify-center hover:bg-primary-hover shadow-lg shadow-indigo-100 disabled:opacity-50 transition-all font-bold"
-                  >
-                     {sending ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : <Send className="w-4 h-4 ml-0.5" />}
-                  </button>
-               </form>
+               {selectedItem?.status === 'sold' && (selectedItem.buyerUid !== user?.uid || selectedItem.isRated) ? (
+                  <div className="flex flex-col items-center justify-center py-4 bg-slate-100/50 rounded-2xl border border-dashed border-slate-200">
+                     <Package className="w-5 h-5 text-slate-300 mb-2" />
+                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        {selectedItem.isRated ? "Transaction Completed & Rated" : "This item has been sold"}
+                     </p>
+                     <p className="text-[10px] text-slate-400 font-medium mt-1">Chat is now read-only</p>
+                  </div>
+               ) : (
+                  <form onSubmit={handleSendMessage} className="flex items-center gap-4 bg-white p-2 pl-6 rounded-2xl shadow-sm border border-slate-100 focus-within:ring-2 focus-within:ring-primary focus-within:border-transparent transition-all">
+                     <input 
+                       type="text" 
+                       placeholder="Type your message here..." 
+                       value={newMessage}
+                       onChange={(e) => setNewMessage(e.target.value)}
+                       className="flex-1 bg-transparent border-none outline-none text-sm font-medium"
+                     />
+                     <button 
+                       type="submit" 
+                       disabled={sending || !newMessage.trim()}
+                       className="w-10 h-10 bg-primary text-white rounded-xl flex items-center justify-center hover:bg-primary-hover shadow-lg shadow-indigo-100 disabled:opacity-50 transition-all font-bold"
+                     >
+                        {sending ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : <Send className="w-4 h-4 ml-0.5" />}
+                     </button>
+                  </form>
+               )}
                <p className="text-[10px] text-center text-slate-400 mt-4 font-bold uppercase tracking-widest">
                   Never share sensitive info like passwords in chat
                </p>
@@ -451,8 +519,9 @@ function MessagesContent() {
                        setRatingLoading(true);
                        try {
                           // 1. Create rating doc
+                          const sellerUid = selectedChat.participants.find((id: string) => id !== auth.currentUser?.uid);
                           await addDoc(collection(db, "ratings"), {
-                             sellerUid: selectedChat.participants.find((id: string) => id !== auth.currentUser?.uid),
+                             targetUid: sellerUid,
                              reviewerUid: auth.currentUser.uid,
                              reviewerName: auth.currentUser.displayName || "Verified Student",
                              rating,

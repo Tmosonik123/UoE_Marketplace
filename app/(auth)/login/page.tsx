@@ -23,8 +23,28 @@ export default function LoginPage() {
       await signInWithEmailAndPassword(auth, email, password);
       router.push("/");
     } catch (err: any) {
-      setError(err.message || "Failed to sign in. Please check your credentials.");
-      console.error(err);
+      console.error(err.code, err);
+      let message = "Failed to sign in. Please check your credentials.";
+      
+      switch (err.code) {
+        case "auth/user-not-found":
+          message = "User not Registered. Please create an account.";
+          break;
+        case "auth/wrong-password":
+          message = "Incorrect password. Please try again.";
+          break;
+        case "auth/invalid-email":
+          message = "Invalid email address format.";
+          break;
+        case "auth/user-disabled":
+          message = "This account has been disabled.";
+          break;
+        case "auth/invalid-credential":
+          message = "Invalid credentials. Please check your email and password.";
+          break;
+      }
+      
+      setError(message);
     } finally {
       setLoading(false);
     }

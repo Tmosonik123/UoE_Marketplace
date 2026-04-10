@@ -14,7 +14,7 @@ const CATEGORIES = [
   { id: '3', name: 'Furniture', icon: '🪑', slug: 'Furniture' },
   { id: '4', name: 'Clothing', icon: '👕', slug: 'Clothing' },
   { id: '5', name: 'Services', icon: '🤝', slug: 'Services' },
-  { id: '6', name: 'Hostels', icon: '🏠', slug: 'Hostels' },
+  { id: '6', name: 'Utensils', icon: '🍽️', slug: 'Utensils' },
 ];
 
 export default function Home() {
@@ -35,7 +35,7 @@ export default function Home() {
         id: doc.id,
         ...doc.data()
       }));
-      
+
       // Sort in-memory and take the top 4
       const sorted = items.sort((a: any, b: any) => {
         const dateA = a.createdAt?.seconds || 0;
@@ -70,31 +70,31 @@ export default function Home() {
       <section className="container pt-10 text-center animate-fade-in">
         <div className="max-w-3xl mx-auto flex flex-col items-center gap-6">
           <div className="badge badge-secondary py-1.5 px-4 mb-2 flex items-center gap-2">
-            <Zap className="w-3.5 h-3.5 text-accent" /> 
+            <Zap className="w-3.5 h-3.5 text-accent" />
             Trusted by {userCount.toLocaleString()}+ UoE Students
           </div>
           <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight">
-            Buy and Sell within your <span className="text-primary italic">Campus.</span>
+            Buy and Sell within <span className="text-primary">UoE.</span>
           </h1>
           <p className="text-slate-500 text-lg md:text-xl max-w-xl">
-            The safest way to trade textbooks, electronics, and furniture with fellow University of Eldoret students.
+            The easiest and convinient way to trade learning materials and household items with fellow University of Eldoret students.
           </p>
-          
+
           <div className="flex flex-col sm:flex-row gap-4 mt-4 w-full justify-center">
             <Link href="/browse" className="btn-primary py-4 px-10 text-lg shadow-xl shadow-indigo-100 dark:shadow-none">
-              Start Browsing <ArrowRight className="w-5 h-5" />
+              Browse Listings <ArrowRight className="w-5 h-5" />
             </Link>
             <Link href="/sell" className="bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 py-4 px-10 text-lg font-bold rounded-xl text-slate-800 dark:text-slate-100 hover:border-primary transition-all">
-              Sell an Item
+              List an Item
             </Link>
           </div>
         </div>
-        
+
         {/* Category Quick Filter */}
         <div className="mt-16 flex flex-wrap justify-center gap-3 md:gap-4">
           {CATEGORIES.map((cat) => (
-            <Link 
-              key={cat.id} 
+            <Link
+              key={cat.id}
               href={`/browse?category=${cat.slug}`}
               className="bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100 hover:border-primary hover:shadow-md transition-all flex items-center gap-3 group"
             >
@@ -120,36 +120,36 @@ export default function Home() {
               See All <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
-          
+
           <div className="grid-marketplace">
             {/* Post an Ad Card - Primary CTA */}
             <Link href="/sell" className="card p-8 bg-slate-900 dark:bg-primary/10 border-none relative overflow-hidden group flex flex-col justify-center min-h-[320px]">
-               <div className="absolute -top-20 -right-20 w-64 h-64 bg-primary/20 rounded-full blur-3xl group-hover:bg-primary/40 transition-all duration-700"></div>
-               <div className="relative z-10">
-                  <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mb-8 shadow-xl shadow-indigo-500/20">
-                     <Zap className="w-8 h-8 text-white fill-white/20" />
-                  </div>
-                  <h3 className="text-2xl font-black text-white mb-4 leading-tight">Got something to <span className="text-primary italic">sell</span>?</h3>
-                  <p className="text-slate-400 text-sm mb-8 leading-relaxed max-w-[200px]">List your items in seconds and reach thousands of students on campus.</p>
-                  <div className="flex items-center gap-2 text-primary font-black uppercase tracking-widest text-[10px]">
-                     Start Listing Now <ArrowRight className="w-4 h-4" />
-                  </div>
-               </div>
+              <div className="absolute -top-20 -right-20 w-64 h-64 bg-primary/20 rounded-full blur-3xl group-hover:bg-primary/40 transition-all duration-700"></div>
+              <div className="relative z-10">
+                <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mb-8 shadow-xl shadow-indigo-500/20">
+                  <Zap className="w-8 h-8 text-white fill-white/20" />
+                </div>
+                <h3 className="text-2xl font-black mb-4 leading-tight">Got something to <span className="text-primary">sell</span>?</h3>
+                <p className="text-slate-400 text-sm mb-8 leading-relaxed max-w-[200px]">List your items in seconds and reach thousands of students around campus.</p>
+                <div className="flex items-center gap-2 text-primary font-black uppercase tracking-widest text-[10px]">
+                  Start Listing Now <ArrowRight className="w-4 h-4" />
+                </div>
+              </div>
             </Link>
 
             {loading ? (
-               [1, 2, 3].map((i) => (
-                  <div key={i} className="card bg-slate-100 dark:bg-slate-800 animate-pulse h-full border-none"></div>
-               ))
+              [1, 2, 3].map((i) => (
+                <div key={i} className="card bg-slate-100 dark:bg-slate-800 animate-pulse h-full border-none"></div>
+              ))
             ) : latestItems.length > 0 ? (
-               latestItems.map((item) => (
-                  <ListingCard key={item.id} item={item} />
-               ))
+              latestItems.map((item) => (
+                <ListingCard key={item.id} item={item} />
+              ))
             ) : (
-               <div className="col-span-full py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
-                  <PackageOpen className="w-12 h-12" />
-                  <p className="font-bold">No active listings found.</p>
-               </div>
+              <div className="col-span-full py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
+                <PackageOpen className="w-12 h-12" />
+                <p className="font-bold">No active listings found.</p>
+              </div>
             )}
           </div>
         </div>
@@ -157,15 +157,15 @@ export default function Home() {
 
       {/* Why Choose Us Section */}
       <section className="container py-10">
-        <h2 className="text-center text-3xl font-bold mb-16">Designed for <span className="text-primary italic underline-offset-8 underline">Campus Safety</span></h2>
+        <h2 className="text-center text-3xl font-bold mb-16">Designed for <span className="text-primary">Trading and Socializing.</span></h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
           <div className="flex flex-col items-center text-center gap-4">
             <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center shadow-inner">
               <ShieldCheck className="w-8 h-8" />
             </div>
             <div>
-              <h3 className="font-bold mb-2">Verified Students</h3>
-              <p className="text-slate-500 text-sm">Trading happens only between authenticated users. No anonymous scammers.</p>
+              <h3 className="font-bold mb-2">Verified Users</h3>
+              <p className="text-slate-500 text-sm">Trading happens only between authenticated users.</p>
             </div>
           </div>
           <div className="flex flex-col items-center text-center gap-4">

@@ -1,0 +1,10 @@
+Sort the listings on the user account between sold and active listings. Once an item is mark as sold and the buyer is selected, the item should be moved to the sold items section and greyed out so that it cannot be marked as unsold again.
+The rating - review should be linked to the customer reviews. It's currently fixed at 5 stars.
+When reviewing an item the review bubble/card does not dissapear on its own after clicking submit review.
+Also after the item is marked as sold, all chats about it(linked to the item) should be disabled for all users so that no futher chats can be sent since the item is already sold. For the person marked as buyer, the chat should be disabled after they review the seller.
+Also on the user profile after the sections (My listings, Saved items, and My reviews), add a new section for items succesfully bought for logs management.
+When a user clicks to view a sold item, they should just view the item and no be allowed to chat with the seller.
+Expand the categories to include others such as utensils, and remove the hostels category.
+On the admin panel the card that shows total listing should me modified to show all total listings(Including sold) and active listings( not sold).
+On the user accounts, it should not show that they are approved until they're approved by admin. Also when a user is banned, the approved badge should be removed. To unban a user, the admin should click the the ban icon(modified to unban when user is banned), same case to the approved button on the admin panel - when clicked user is approved and icon is modified to show the approved status, when re-clicked it should strip the user of the approved badge.
+When I sign out of the admin account and sign in to a normal user account, the navbar glitches and keeps switching between the admin and the normal user navbar untill i reload the page.
