@@ -27,6 +27,8 @@ function MessagesContent() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
+  const scrollContainerRef = useRef<null | HTMLDivElement>(null);
+  const isInitialLoadRef = useRef(true);
   // Track which chats we've cleared unread for this session to avoid cascading writes
   const clearedChatsRef = useRef<Set<string>>(new Set());
 
@@ -132,6 +134,9 @@ function MessagesContent() {
   useEffect(() => {
     if (!selectedChat) return;
     
+    // Reset initial load flag when switching chats
+    isInitialLoadRef.current = true;
+    
     const q = query(
       collection(db, "chats", selectedChat.id, "messages"),
       orderBy("createdAt", "asc")
@@ -159,9 +164,27 @@ function MessagesContent() {
           timestamp: formattedTime
         };
       });
-      // Replace all messages (including any optimistic ones) with the authoritative server list
+
+      // replace all messages
       setMessages(msgList);
-      setTimeout(scrollToBottom, 50);
+      
+      // Determine if we should scroll
+      const container = scrollContainerRef.current;
+      if (container) {
+         // If initial load, jump regardless. If new messages, only jump if near bottom.
+         const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+         const shouldScroll = isInitialLoadRef.current || isNearBottom;
+         
+         if (shouldScroll) {
+            // Short delay to ensure DOM has rendered new messages
+            setTimeout(() => {
+              scrollToBottom(isInitialLoadRef.current ? "auto" : "smooth");
+              isInitialLoadRef.current = false;
+            }, 10);
+         } else {
+            isInitialLoadRef.current = false;
+         }
+      }
     }, (err) => {
       console.error("[onSnapshot Chat Messages] error:", err);
     });
@@ -209,8 +232,13 @@ function MessagesContent() {
      fetchItem();
   }, [selectedChat?.itemId]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({
+        top: scrollContainerRef.current.scrollHeight,
+        behavior
+      });
+    }
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -401,7 +429,10 @@ function MessagesContent() {
             )}
 
             {/* Chat Messages Area */}
-            <div className="flex-1 overflow-y-auto p-8 flex flex-col gap-6">
+            <div 
+              ref={scrollContainerRef}
+              className="flex-1 overflow-y-auto p-8 flex flex-col gap-6"
+            >
               <div className="text-center py-6">
                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-300 bg-slate-100/50 px-4 py-1.5 rounded-full">
                     Safe zone chat enabled
