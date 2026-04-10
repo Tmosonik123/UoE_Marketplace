@@ -363,18 +363,20 @@ export default function ProfilePage() {
                         </Link>
                      ))
                   ) : (
-                    <div className="col-span-full py-20 bg-slate-50 dark:bg-slate-900/50 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-center gap-4">
-                       <Clock className="w-12 h-12 text-slate-300 dark:text-slate-700 mb-2" />
-                       <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
-                         {listings.length > 0 ? "No active listings" : "No active listings yet"}
-                       </h3>
-                       <p className="text-slate-500 dark:text-slate-400 max-w-xs">
-                         {listings.length > 0 ? "You have no items currently for sale." : "You haven't listed any items for sale."}
-                       </p>
-                       <Link href="/sell" className="text-primary font-bold hover:underline">
-                         {listings.length > 0 ? "Sell something new &rarr;" : "List your first item &rarr;"}
-                       </Link>
-                    </div>
+                     <div className="col-span-full py-20 bg-slate-50 dark:bg-slate-900/50 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-center gap-4">
+                        <Clock className="w-12 h-12 text-slate-300 dark:text-slate-700 mb-2" />
+                        <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+                          {listings.length > 0 ? "All Sold! 🎉" : "No active listings yet"}
+                        </h3>
+                        <p className="text-slate-500 dark:text-slate-400 max-w-xs">
+                          {listings.length > 0 
+                            ? "You've successfully cleared your inventory! Ready for the next one?" 
+                            : "You haven't listed any items for sale."}
+                        </p>
+                        <Link href="/sell" className="btn-primary px-8 mt-2">
+                          {listings.length > 0 ? "List another item" : "List your first item"}
+                        </Link>
+                     </div>
                   )}
                </div>
 

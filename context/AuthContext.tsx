@@ -36,6 +36,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUser(currentUser);
       
       if (currentUser) {
+        // Update lastSeen (throttle this in a real app, but for now every session/refresh is fine)
+        updateDoc(doc(db, "users", currentUser.uid), {
+          lastSeen: new Date().toISOString()
+        }).catch(err => console.error("Error updating lastSeen:", err));
+
         // Real-time listener for custom user data
         unsubscribeUserDoc = onSnapshot(doc(db, "users", currentUser.uid), (docSnap) => {
           if (docSnap.exists()) {
@@ -53,11 +58,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             } else {
               setUserData(data);
             }
-
-            // Update lastSeen (throttle this in a real app, but for now every session/refresh is fine)
-            updateDoc(doc(db, "users", currentUser.uid), {
-              lastSeen: new Date().toISOString()
-            }).catch(err => console.error("Error updating lastSeen:", err));
           }
           setLoading(false);
         }, (err) => {
